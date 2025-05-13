@@ -3,4 +3,4 @@ websocket-client
 pandas
 requests
 plotly
-fastapi uvicorn
+fastapi
