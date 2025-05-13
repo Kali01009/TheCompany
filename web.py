@@ -1,43 +1,29 @@
 from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
-from analyze import start_analysis, get_candles_for_index
+from fastapi.responses import JSONResponse
+from analyze import start_analysis, index_candles
 
 app = FastAPI()
 
-selected_indexes = []
-
-@app.get("/", response_class=HTMLResponse)
-def index():
-    indexes = ["R_10", "R_25", "R_75", "R_100"]
-    html = """
-    <html>
-    <head><title>Volatility Analyzer</title></head>
-    <body>
-        <h2>Select Indexes to Analyze:</h2>
-        <form action="/start" method="post">
-    """
-    for index in indexes:
-        checked = "checked" if index in selected_indexes else ""
-        html += f"""
-            <label>
-                <input type="checkbox" name="indexes" value="{index}" {checked}> {index}
-            </label><br>
-        """
-    html += """
-            <button type="submit">Start Analysis</button>
-        </form>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
+@app.get("/")
+def root():
+    return {"message": "📊 Volatility Analyzer is running."}
 
 @app.post("/start")
-async def start(indexes: list[str] = Form(default=[])):
-    global selected_indexes
-    selected_indexes = indexes
-    start_analysis(selected_indexes)
-    return RedirectResponse("/", status_code=303)
+def start(indexes: str = Form(...)):
+    try:
+        symbols = indexes.split(",")
+        start_analysis(symbols)
+        return {"status": "started", "symbols": symbols}
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
-@app.get("/candles/{index_name}")
-def candles(index_name: str):
-    return get_candles_for_index(index_name)
+@app.get("/candles/{index}")
+def get_candles(index: str):
+    data = index_candles.get(index)
+    if not data:
+        return JSONResponse(content={"error": "No data for index"}, status_code=404)
+    candles = [
+        {"timestamp": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4]}
+        for c in data[-50:]
+    ]
+    return {"index": index, "candles": candles}
