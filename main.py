@@ -12,9 +12,11 @@ def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": message}
     try:
-        requests.post(url, data=payload)
-    except Exception as e:
-        print("Failed to send message:", e)
+        response = requests.post(url, data=payload)
+        response.raise_for_status()  # This will raise an error for non-200 status codes
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to send message: {e}")
+        raise  # Re-raise the exception so it's logged by Flask
 
 # WebSocket callback handlers
 def on_message(ws, message):
@@ -50,16 +52,14 @@ def on_open(ws):
     }
     ws.send(json.dumps(subscribe_message))
 
-# main.py
-
+# Example function to get signals
 def get_signals():
-    # Example signals data
+    # Example signals data (this can be replaced with real-time data)
     signals = [
         {"symbol": "BTCUSDT", "action": "BUY", "price": 27500},
         {"symbol": "ETHUSDT", "action": "SELL", "price": 1850}
     ]
     return signals
-
 
 # Run WebSocket
 if __name__ == "__main__":
