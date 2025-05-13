@@ -12,6 +12,7 @@ CHAT_ID = "6734231237"
 # Global candle storage
 candle_data = []
 
+
 # Send Telegram message
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -24,6 +25,7 @@ def send_telegram_message(message):
         requests.post(url, data=payload)
     except Exception as e:
         print("Telegram Error:", e)
+
 
 # Pattern detection logic
 def detect_patterns(df):
@@ -44,12 +46,12 @@ def detect_patterns(df):
         tp = entry + (entry - sl) * 1.5
         detected.append(("🚩 Bullish Flag", entry, sl, tp))
 
-    # Add more pattern logic as needed...
     return detected
+
 
 # Analyze and send signal
 def analyze_data():
-    if len(candle_data) < 500:
+    if len(candle_data) < 20:
         return
 
     df = pd.DataFrame(candle_data[-500:], columns=["timestamp", "open", "high", "low", "close"])
@@ -60,7 +62,7 @@ def analyze_data():
         last_close = df["close"].iloc[-1]
         break_even = entry
 
-        # Hold Advice
+        # Advice
         if sl * 0.99 < last_close < sl * 1.01:
             advice = "⚠️ Risky – Consider Exit"
         elif last_close > tp * 0.97:
@@ -78,6 +80,20 @@ def analyze_data():
         )
         send_telegram_message(message)
 
+
+# Provide latest candles to web.py
+def get_candles():
+    return [
+        {
+            "timestamp": time.strftime('%H:%M:%S', time.gmtime(c[0])),
+            "open": c[1],
+            "high": c[2],
+            "low": c[3],
+            "close": c[4]
+        } for c in candle_data[-50:]  # Only last 50 candles
+    ]
+
+
 # WebSocket handlers
 def on_open(ws):
     subscribe = {
@@ -89,25 +105,31 @@ def on_open(ws):
     }
     ws.send(json.dumps(subscribe))
 
+
 def on_message(ws, message):
     data = json.loads(message)
+    global candle_data
+
+    candles = []
     if "candles" in data:
         candles = data["candles"]
-        candle_data.clear()
-        for c in candles:
-            candle_data.append([c["epoch"], c["open"], c["high"], c["low"], c["close"]])
     elif "history" in data:
         candles = data["history"]["candles"]
-        candle_data.clear()
-        for c in candles:
-            candle_data.append([c["epoch"], c["open"], c["high"], c["low"], c["close"]])
+
+    candle_data = [
+        [c["epoch"], c["open"], c["high"], c["low"], c["close"]]
+        for c in candles
+    ]
     analyze_data()
+
 
 def on_error(ws, error):
     print("WebSocket error:", error)
 
+
 def on_close(ws, close_status_code, close_msg):
     print("WebSocket closed")
+
 
 # Run WebSocket in background thread
 def run_websocket():
@@ -120,11 +142,12 @@ def run_websocket():
     )
     ws.run_forever()
 
+
 if __name__ == "__main__":
     print("📊 Analyzer started. Listening for patterns...")
     threading.Thread(target=run_websocket).start()
 
-    # Loop every 60 seconds for live updates
+    # Optional: keep analyzing every minute
     while True:
         time.sleep(60)
         analyze_data()
