@@ -67,4 +67,7 @@ def send_hello():
         return f"Error: {str(e)}", 500  # Return error message if something goes wrong
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000, debug=True)  # Run with debug mode for detailed logs
+    import os
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
