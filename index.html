@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Deriv Tick Data Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 20px;
+      color: #333;
+    }
+    h1 {
+      color: #444;
+    }
+    #output {
+      margin-top: 20px;
+      padding: 10px;
+      background: white;
+      border: 1px solid #ddd;
+      height: 400px;
+      overflow-y: scroll;
+    }
+    .tick {
+      margin-bottom: 10px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Deriv Tick Data (R_10)</h1>
+  <div id="output">Connecting to WebSocket...</div>
+
+  <script>
+    const output = document.getElementById('output');
+
+    const socket = new WebSocket("wss://ws.binaryws.com/websockets/v3?app_id=1089");
+
+    socket.onopen = function () {
+      output.innerHTML += "<p><strong>WebSocket connection established.</strong></p>";
+      const subscribeMsg = {
+        "ticks": "R_10"
+      };
+      socket.send(JSON.stringify(subscribeMsg));
+    };
+
+    socket.onmessage = function (event) {
+      const data = JSON.parse(event.data);
+      const now = new Date().toLocaleTimeString();
+      if (data.tick) {
+        const tickInfo = `
+          <div class="tick">
+            <strong>Time:</strong> ${now}<br>
+            <strong>Symbol:</strong> ${data.tick.symbol}<br>
+            <strong>Price:</strong> ${data.tick.quote}<br>
+            <strong>Epoch:</strong> ${data.tick.epoch}
+          </div>
+        `;
+        output.innerHTML = tickInfo + output.innerHTML; // prepend to keep latest on top
+      } else {
+        output.innerHTML += "<p>Received: " + JSON.stringify(data) + "</p>";
+      }
+    };
+
+    socket.onerror = function (error) {
+      output.innerHTML += "<p style='color:red;'>WebSocket error: " + error.message + "</p>";
+    };
+
+    socket.onclose = function () {
+      output.innerHTML += "<p><strong>WebSocket connection closed.</strong></p>";
+    };
+  </script>
+
+</body>
+</html>
