@@ -1,6 +1,6 @@
 from flask import Flask, render_template_string, jsonify
 from main import send_telegram_message  # Optional if you want to trigger Telegram
-from analyze import get_signals, get_candles
+from analyze import get_candles
 
 app = Flask(__name__)
 
