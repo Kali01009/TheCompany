@@ -1,58 +1,77 @@
 import websocket
 import json
 import pandas as pd
-import numpy as np
+import time
+import threading
 from main import send_telegram_message
 
 # Constants
 SYMBOL = "R_10"
-INTERVAL = 60  # 1-minute candles
-CANDLE_COUNT = 100
+INTERVAL = 60          # 1-minute candles
+CANDLE_COUNT = 500     # Analyze past 500 candles
+REFRESH_INTERVAL = 60  # Analyze every 60 seconds
 
+# Global DataFrame to store candles
+candle_df = pd.DataFrame()
+
+# Pattern Detection Logic
 def identify_patterns(df):
-    patterns = []
+    patterns = set()
 
-    # Simple breakout detection (for future enhancement)
-    last = df.iloc[-1]
-    prev = df.iloc[-2]
+    for i in range(50, len(df) - 1):
+        window = df.iloc[i-50:i]
 
-    # Detect double top / double bottom
-    if abs(df["high"].iloc[-1] - df["high"].iloc[-3]) < 0.05 and last["close"] < last["open"]:
-        patterns.append("🔻 Possible Double Top detected")
-    elif abs(df["low"].iloc[-1] - df["low"].iloc[-3]) < 0.05 and last["close"] > last["open"]:
-        patterns.append("🔺 Possible Double Bottom detected")
+        # Double Top
+        if abs(window["high"].iloc[-1] - window["high"].iloc[-3]) < 0.05 and window["close"].iloc[-1] < window["open"].iloc[-1]:
+            patterns.add("🔻 Double Top")
 
-    # Detect triangle compression (symmetric)
-    recent_highs = df["high"].tail(10)
-    recent_lows = df["low"].tail(10)
-    if recent_highs.max() - recent_lows.min() < 0.2 * df["close"].mean():
-        patterns.append("🔺 Symmetrical Triangle forming")
+        # Double Bottom
+        if abs(window["low"].iloc[-1] - window["low"].iloc[-3]) < 0.05 and window["close"].iloc[-1] > window["open"].iloc[-1]:
+            patterns.add("🔺 Double Bottom")
 
-    # Detect flag/pennant (basic version)
-    if (last["close"] > prev["close"] and 
-        df["close"].iloc[-5] < df["close"].iloc[-1] and
-        (df["high"].max() - df["low"].min()) / df["low"].min() < 0.02):
-        patterns.append("🚩 Possible Bullish Flag or Pennant")
+        # Symmetrical Triangle
+        recent_highs = window["high"].tail(20)
+        recent_lows = window["low"].tail(20)
+        if recent_highs.max() - recent_lows.min() < 0.2 * window["close"].mean():
+            patterns.add("🔺 Symmetrical Triangle")
 
-    # Falling wedge / rising wedge estimate
-    if (df["high"].diff().mean() < 0 and df["low"].diff().mean() > 0):
-        patterns.append("🔻 Falling Wedge forming (bullish)")
-    elif (df["high"].diff().mean() > 0 and df["low"].diff().mean() < 0):
-        patterns.append("🔺 Rising Wedge forming (bearish)")
+        # Bullish Flag
+        if (window["close"].iloc[-1] > window["close"].iloc[-2] and
+            window["close"].iloc[-10] < window["close"].iloc[-1] and
+            (window["high"].max() - window["low"].min()) / window["low"].min() < 0.02):
+            patterns.add("🚩 Bullish Flag")
+
+        # Wedges
+        if (window["high"].diff().mean() < 0 and window["low"].diff().mean() > 0):
+            patterns.add("📉 Falling Wedge")
+        elif (window["high"].diff().mean() > 0 and window["low"].diff().mean() < 0):
+            patterns.add("📈 Rising Wedge")
 
     return patterns
 
-# WebSocket handlers
+def analyze_data():
+    if len(candle_df) >= 100:
+        patterns = identify_patterns(candle_df.copy())
+        if patterns:
+            for p in patterns:
+                send_telegram_message(f"[V10 1m] Pattern Detected: {p}")
+        else:
+            print("No pattern found.")
+    else:
+        print("Waiting for more data...")
+
+# WebSocket callbacks
 def on_message(ws, message):
+    global candle_df
     data = json.loads(message)
     if "candles" in data:
         candles = data["candles"]
-        df = pd.DataFrame(candles, columns=["timestamp", "open", "high", "low", "close"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
+        new_df = pd.DataFrame(candles, columns=["timestamp", "open", "high", "low", "close"])
+        new_df["timestamp"] = pd.to_datetime(new_df["timestamp"], unit="s")
 
-        patterns = identify_patterns(df)
-        for p in patterns:
-            send_telegram_message(f"[V10] {p}")
+        # Keep only the latest 500 unique candles
+        candle_df = pd.concat([candle_df, new_df]).drop_duplicates("timestamp")
+        candle_df = candle_df.sort_values("timestamp").tail(CANDLE_COUNT).reset_index(drop=True)
 
 def on_open(ws):
     print("WebSocket opened")
@@ -60,7 +79,7 @@ def on_open(ws):
         "ticks_history": SYMBOL,
         "style": "candles",
         "granularity": INTERVAL,
-        "count": CANDLE_COUNT,
+        "count": 100,
         "subscribe": 1
     }))
 
@@ -70,12 +89,25 @@ def on_error(ws, error):
 def on_close(ws, code, reason):
     print("WebSocket closed:", reason)
 
-# Run pattern detection
+# Run analysis every 60 seconds
+def periodic_analysis():
+    while True:
+        time.sleep(REFRESH_INTERVAL)
+        analyze_data()
+
+# Start everything
 if __name__ == "__main__":
-    socket = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
-    ws = websocket.WebSocketApp(socket,
+    socket_url = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
+    ws = websocket.WebSocketApp(socket_url,
                                  on_open=on_open,
                                  on_message=on_message,
                                  on_error=on_error,
                                  on_close=on_close)
+
+    # Start background thread
+    analysis_thread = threading.Thread(target=periodic_analysis)
+    analysis_thread.daemon = True
+    analysis_thread.start()
+
+    # Run WebSocket
     ws.run_forever()
