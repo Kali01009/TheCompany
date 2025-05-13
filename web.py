@@ -1,29 +1,14 @@
-from fastapi import FastAPI, Form
-from fastapi.responses import JSONResponse
-from analyze import start_analysis, index_candles
+from fastapi import FastAPI
+import os
 
 app = FastAPI()
 
 @app.get("/")
-def root():
-    return {"message": "📊 Volatility Analyzer is running."}
+def read_root():
+    return {"message": "🚀 WebSocket breakout bot is running!"}
 
-@app.post("/start")
-def start(indexes: str = Form(...)):
-    try:
-        symbols = indexes.split(",")
-        start_analysis(symbols)
-        return {"status": "started", "symbols": symbols}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.get("/candles/{index}")
-def get_candles(index: str):
-    data = index_candles.get(index)
-    if not data:
-        return JSONResponse(content={"error": "No data for index"}, status_code=404)
-    candles = [
-        {"timestamp": c[0], "open": c[1], "high": c[2], "low": c[3], "close": c[4]}
-        for c in data[-50:]
-    ]
-    return {"index": index, "candles": candles}
+# Make sure this runs only when `web.py` is the entry point
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("web:app", host="0.0.0.0", port=port)
