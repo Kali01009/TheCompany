@@ -1,8 +1,8 @@
 services:
-  - type: worker
-    name: telegram-trading-bot
+  - type: web
+    name: volatility-analyzer
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    startCommand: uvicorn web:app --host 0.0.0.0 --port 10000
     autoDeploy: true
