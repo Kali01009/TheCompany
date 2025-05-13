@@ -118,17 +118,12 @@ signal_thread.start()
 @app.route('/')
 def home():
     try:
-        # Only show signals if there are new ones
-        if not signals:
-            signals = ["No signals at the moment..."]
-        
-        # Generate dummy closing prices for demonstration (replace this with actual data)
-        closing_prices = [100, 105, 110, 115, 120, 125, 130, 135, 140, 145]
-        
-        return render_template_string(chart_template, signals=signals, closing_prices=closing_prices)
-    
+        signals = get_signals()  # Try to fetch signals
     except Exception as e:
-        return f"Error fetching signals: {str(e)}", 500
+        signals = []  # If there's an error, fallback to an empty list
+        print("Error fetching signals:", e)
+    
+    return render_template_string(HTML_TEMPLATE, signals=signals)
 
 @app.route('/send_hello', methods=['GET'])
 def send_hello():
