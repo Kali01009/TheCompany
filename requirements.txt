@@ -2,3 +2,4 @@ Flask
 websocket-client
 pandas
 requests
+ploty
