@@ -1,4 +1,0 @@
-pandas
-Flask
-websocket-client
-requests
