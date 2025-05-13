@@ -41,3 +41,9 @@ async def start(indexes: list[str] = Form(default=[])):
 @app.get("/candles/{index_name}")
 def candles(index_name: str):
     return get_candles_for_index(index_name)
+
+if __name__ == '__main__':
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
+
