@@ -1,10 +1,9 @@
 from flask import Flask, render_template_string
 from main import send_telegram_message
-from analyze import get_latest_signals
 
 app = Flask(__name__)
 
-# HTML Template for the dashboard
+# HTML without signal display
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -18,16 +17,6 @@ HTML_TEMPLATE = """
         }
         h1 {
             color: #333;
-        }
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-        li {
-            background: #fff;
-            margin: 10px 0;
-            padding: 10px;
-            border-left: 5px solid #6a1b9a;
         }
         button {
             padding: 10px 20px;
@@ -43,15 +32,8 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>Live Signals</h1>
-    <ul>
-        {% for signal in signals %}
-            <li>{{ signal }}</li>
-        {% else %}
-            <li>No signals at the moment</li>
-        {% endfor %}
-    </ul>
-    
+    <h1>Signal Dashboard</h1>
+
     <button onclick="sendHello()">Send Hello to Telegram</button>
 
     <script>
@@ -70,12 +52,7 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
-    try:
-        signals = get_latest_signals()  # Import from analyze.py
-    except Exception as e:
-        signals = []
-        print("Error fetching signals:", e)
-    return render_template_string(HTML_TEMPLATE, signals=signals)
+    return render_template_string(HTML_TEMPLATE)
 
 @app.route('/send_hello', methods=['GET'])
 def send_hello():
