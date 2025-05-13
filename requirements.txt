@@ -1,8 +1,8 @@
-Flask
-websocket-client
-pandas
-requests
-plotly
-fastapi
-uvicorn
-python-multipart
+fastapi==0.110.1
+uvicorn==0.29.0
+pandas==2.2.2
+requests==2.31.0
+plotly==5.22.0
+websocket-client==1.7.0
+python-multipart==0.0.9
+
