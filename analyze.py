@@ -6,8 +6,8 @@ import time
 import requests
 
 # Telegram credentials
-BOT_TOKEN = "YOUR_BOT_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+BOT_TOKEN = "7819951392:AAFkYd9-sblexjXNqgIfhbWAIC1Lr6NmPpo"
+CHAT_ID = "6734231237"
 
 # Global candle storage
 candle_data = []
