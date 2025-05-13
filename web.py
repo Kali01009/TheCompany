@@ -1,5 +1,5 @@
 from flask import Flask, render_template_string, request
-from main import send_telegram_message
+from main import send_telegram_message, get_signals
 
 app = Flask(__name__)
 
@@ -42,7 +42,8 @@ HTML_TEMPLATE = """
                 method: 'GET',
             })
             .then(response => response.text())
-            .then(data => alert(data));
+            .then(data => alert(data))
+            .catch(error => alert('Error sending message: ' + error));
         }
     </script>
 </body>
@@ -51,13 +52,19 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
-    signals = get_signals()  # Assuming get_signals() is defined to return live data
-    return render_template_string(HTML_TEMPLATE, signals=signals)
+    try:
+        signals = get_signals()  # Fetch live signals
+        return render_template_string(HTML_TEMPLATE, signals=signals)
+    except Exception as e:
+        return f"Error fetching signals: {str(e)}", 500
 
 @app.route('/send_hello', methods=['GET'])
 def send_hello():
-    send_telegram_message("Hello")  # Sends a "Hello" message to Telegram
-    return "Message sent to Telegram!"
+    try:
+        send_telegram_message("Hello")  # Sends a "Hello" message to Telegram
+        return "Message sent to Telegram!"
+    except Exception as e:
+        return f"Error: {str(e)}", 500  # Return error message if something goes wrong
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=10000, debug=True)  # Run with debug mode for detailed logs
