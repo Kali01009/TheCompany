@@ -8,7 +8,6 @@ import requests
 BOT_TOKEN = "7819951392:AAFkYd9-sblexjXNqgIfhbWAIC1Lr6NmPpo"
 CHAT_ID = "6734231237"
 
-# Track candles per index
 index_candles = {}
 subscribed_indexes = []
 
@@ -60,14 +59,6 @@ def analyze_data_for_index(index):
             f"{advice}"
         )
         send_telegram_message(message)
-
-def get_candles_for_index(index):
-    return [
-        {
-            "timestamp": time.strftime('%H:%M:%S', time.gmtime(c[0])),
-            "open": c[1], "high": c[2], "low": c[3], "close": c[4]
-        } for c in index_candles.get(index, [])[-50:]
-    ]
 
 def on_message_factory(index):
     def on_message(ws, message):
