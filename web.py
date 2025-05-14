@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse
 import pandas as pd
 import plotly.graph_objects as go
 import json
+import asyncio
 
 from analyze import index_candles  # Make sure this path is correct
 
@@ -120,7 +121,7 @@ def candlestick_chart(index: str):
         </div>
 
         <script>
-            const ws = new WebSocket('ws://localhost:8000/ws/{index}');  // Update WebSocket endpoint with the index
+            const ws = new WebSocket('ws://localhost:{port}/ws/{index}');  // Update WebSocket endpoint with the index and port
             const table = document.getElementById('data-table').getElementsByTagName('tbody')[0];
 
             ws.onmessage = function(event) {{
@@ -157,3 +158,8 @@ async def websocket_endpoint(websocket: WebSocket, index: str):
             await asyncio.sleep(1)  # Wait for 1 second before sending the next data
     except WebSocketDisconnect:
         print(f"Client disconnected from {index} WebSocket")
+
+if __name__ == "__main__":
+    import uvicorn
+    port = os.environ.get('PORT', 8000)  # Get port from the environment or use 8000
+    uvicorn.run(app, host="0.0.0.0", port=int(port))
