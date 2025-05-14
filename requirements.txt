@@ -6,3 +6,4 @@ plotly==5.22.0
 websocket-client==1.7.0
 python-multipart==0.0.9
 websockets
+
