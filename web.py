@@ -1,39 +1,22 @@
 import asyncio
 import json
-import time
 import websockets
 import pandas as pd
-import requests
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 import uvicorn
 
 app = FastAPI()
 
-# === Telegram Bot Configuration ===
-BOT_TOKEN = "7819951392:AAFkYd9-sblexjXNqgIfhbWAIC1Lr6NmPpo"
-CHAT_ID = "6734231237"
-
-def send_telegram_message(message: str):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message}
-    try:
-        requests.post(url, data=payload)
-    except Exception as e:
-        print("Failed to send Telegram message:", e)
-
-# === Candlestick Data Store ===
-candles = []
+# WebSocket connection details
 SYMBOL = "R_75"
 GRANULARITY = 60
 COUNT = 50
 APP_ID = 1089
 WS_URL = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
 
-# === Pattern Detection Settings ===
-RANGE_WINDOW = 10
-BREAKOUT_THRESHOLD = 0.01
-last_signal_sent = None
+# Global candle data
+candles = []
 
 async def fetch_initial_candles(ws):
     request = {
@@ -45,34 +28,7 @@ async def fetch_initial_candles(ws):
     await ws.send(json.dumps(request))
     response = await ws.recv()
     data = json.loads(response)
-    if "candles" in data:
-        return data["candles"]
-    return []
-
-def check_for_breakout(df: pd.DataFrame):
-    global last_signal_sent
-    if len(df) < RANGE_WINDOW + 1:
-        return
-
-    range_df = df.iloc[-(RANGE_WINDOW + 1):-1]
-    latest = df.iloc[-1]
-
-    range_high = range_df["high"].max()
-    range_low = range_df["low"].min()
-
-    breakout_up = latest["high"] > range_high * (1 + BREAKOUT_THRESHOLD)
-    breakout_down = latest["low"] < range_low * (1 - BREAKOUT_THRESHOLD)
-
-    if breakout_up and last_signal_sent != "up":
-        message = f"🚀 Breakout UP Detected!\nPrice: {latest['close']:.2f}\nAbove Range: {range_high:.2f}"
-        send_telegram_message(message)
-        last_signal_sent = "up"
-    elif breakout_down and last_signal_sent != "down":
-        message = f"📉 Breakout DOWN Detected!\nPrice: {latest['close']:.2f}\nBelow Range: {range_low:.2f}"
-        send_telegram_message(message)
-        last_signal_sent = "down"
-    elif not breakout_up and not breakout_down:
-        last_signal_sent = None
+    return data.get("candles", [])
 
 async def candle_updater():
     global candles
@@ -116,53 +72,22 @@ async def candle_updater():
                 if len(candles) > COUNT:
                     candles.pop(0)
 
-                df = pd.DataFrame(candles)
-                check_for_breakout(df)
-
 @app.get("/", response_class=HTMLResponse)
 async def get_table_page():
-    table_rows = ""
-    for candle in reversed(candles):
-        row = f"""
-        <tr>
-            <td>{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(candle['epoch']))}</td>
-            <td>{candle['open']:.2f}</td>
-            <td>{candle['high']:.2f}</td>
-            <td>{candle['low']:.2f}</td>
-            <td>{candle['close']:.2f}</td>
-        </tr>
-        """
-        table_rows += row
-
-    return f"""
+    return """
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Volatility 75 - Candlestick Table</title>
-        <meta http-equiv="refresh" content="60">
+        <title>Live Candlestick Data - Table</title>
         <style>
-            body {{
-                font-family: Arial, sans-serif;
-                padding: 20px;
-            }}
-            table {{
-                border-collapse: collapse;
-                width: 100%;
-            }}
-            th, td {{
-                border: 1px solid #ddd;
-                text-align: center;
-                padding: 8px;
-            }}
-            th {{
-                background-color: #f2f2f2;
-            }}
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+            th { background-color: #eee; }
         </style>
     </head>
     <body>
-        <h2>Volatility 75 - Candlestick Data (Last {len(candles)} Entries)</h2>
-        <p>Auto-refreshes every 60 seconds</p>
-        <table>
+        <h2>Volatility 75 - Live Candlestick Table</h2>
+        <table id="candle-table">
             <thead>
                 <tr>
                     <th>Time</th>
@@ -172,10 +97,33 @@ async def get_table_page():
                     <th>Close</th>
                 </tr>
             </thead>
-            <tbody>
-                {table_rows}
-            </tbody>
+            <tbody></tbody>
         </table>
+
+        <script>
+            async function loadCandles() {
+                const res = await fetch('/candles');
+                const data = await res.json();
+                const tbody = document.querySelector('#candle-table tbody');
+                tbody.innerHTML = '';
+
+                data.candles.slice().reverse().forEach(c => {
+                    const row = document.createElement('tr');
+                    const date = new Date(c.epoch * 1000).toLocaleTimeString();
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${c.open.toFixed(2)}</td>
+                        <td>${c.high.toFixed(2)}</td>
+                        <td>${c.low.toFixed(2)}</td>
+                        <td>${c.close.toFixed(2)}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            loadCandles();
+            setInterval(loadCandles, 60000); // update every 60 seconds
+        </script>
     </body>
     </html>
     """
@@ -189,4 +137,4 @@ async def start_updater():
     asyncio.create_task(candle_updater())
 
 if __name__ == "__main__":
-    uvicorn.run("web:app", host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
