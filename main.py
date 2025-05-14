@@ -48,6 +48,11 @@ async def fetch_and_update_candles():
             print("Error fetching candles:", e)
         await asyncio.sleep(60)
 
+# === Candles Data Endpoint ===
+@app.get("/candles")
+async def get_candles():
+    return {"candles": candles}
+
 # === HTML Display Page ===
 @app.get("/", response_class=HTMLResponse)
 async def display_table():
@@ -84,3 +89,4 @@ async def display_table():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
