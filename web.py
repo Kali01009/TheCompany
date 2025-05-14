@@ -1,10 +1,11 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-import plotly.graph_objects as go
 import pandas as pd
+import plotly.graph_objects as go
+import json
 
-from analyze import index_candles  # Ensure this is the correct path where your 'index_candles' is stored.
+from analyze import index_candles  # Make sure this path is correct
 
 app = FastAPI()
 
@@ -79,21 +80,80 @@ def candlestick_chart(index: str):
                 background-color: #2c2f38;
                 border-radius: 10px;
             }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+            }}
+            table, th, td {{
+                border: 1px solid white;
+                padding: 8px;
+                text-align: center;
+            }}
+            th {{
+                background-color: #444;
+            }}
+            tr:nth-child(even) {{
+                background-color: #333;
+            }}
         </style>
     </head>
     <body>
         <div class="chart-container">
             <h1>{index} - Candlestick Chart</h1>
             {chart_html}
+            <h2>Live Data</h2>
+            <table id="data-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Open</th>
+                        <th>High</th>
+                        <th>Low</th>
+                        <th>Close</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Table rows will be inserted here by JavaScript -->
+                </tbody>
+            </table>
         </div>
+
+        <script>
+            const ws = new WebSocket('ws://localhost:8000/ws/{index}');  // Update WebSocket endpoint with the index
+            const table = document.getElementById('data-table').getElementsByTagName('tbody')[0];
+
+            ws.onmessage = function(event) {{
+                const data = JSON.parse(event.data);
+                const row = table.insertRow(0);
+                row.insertCell(0).innerHTML = new Date(data.timestamp * 1000).toLocaleString();
+                row.insertCell(1).innerHTML = data.open;
+                row.insertCell(2).innerHTML = data.high;
+                row.insertCell(3).innerHTML = data.low;
+                row.insertCell(4).innerHTML = data.close;
+            }};
+        </script>
     </body>
     </html>
     """
-
     return HTMLResponse(content=html_content, status_code=200)
 
-# Ensure to bind to the correct host and port
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))  # Default to 8000 if PORT is not set
-    uvicorn.run(app, host="0.0.0.0", port=port)
+# WebSocket endpoint to send live data updates
+@app.websocket("/ws/{index}")
+async def websocket_endpoint(websocket: WebSocket, index: str):
+    await websocket.accept()
+    try:
+        while True:
+            if index in index_candles and len(index_candles[index]) > 0:
+                last_candle = index_candles[index][-1]
+                candle_data = {
+                    "timestamp": last_candle[0],
+                    "open": last_candle[1],
+                    "high": last_candle[2],
+                    "low": last_candle[3],
+                    "close": last_candle[4]
+                }
+                await websocket.send_text(json.dumps(candle_data))
+            await asyncio.sleep(1)  # Wait for 1 second before sending the next data
+    except WebSocketDisconnect:
+        print(f"Client disconnected from {index} WebSocket")
