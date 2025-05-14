@@ -8,6 +8,11 @@ from analyze import index_candles  # Ensure this is the correct path where your 
 
 app = FastAPI()
 
+# Root endpoint (for testing)
+@app.get("/", response_class=HTMLResponse)
+def read_root():
+    return HTMLResponse(content="<h1>Welcome to the Volatility Analyzer</h1>", status_code=200)
+
 @app.get("/chart/{index}", response_class=HTMLResponse)
 def candlestick_chart(index: str):
     # Check if the index data exists
