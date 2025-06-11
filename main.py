@@ -1,113 +1,72 @@
-import asyncio
+import requests
+import websocket
 import json
-import websockets
 import pandas as pd
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from contextlib import asynccontextmanager
-import os
 
-# === Candle Config ===
-SYMBOL = "R_75"
-GRANULARITY = 60  # 1-minute candles
-COUNT = 20  # Last 20 candles (~20 minutes)
-APP_ID = 1089
-WS_URL = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
+# Telegram bot token and chat ID (replace with your actual chat ID)
+BOT_TOKEN = "7819951392:AAFkYd9-sblexjXNqgIfhbWAIC1Lr6NmPpo"
+CHAT_ID = "6734231237"  # Replace this with your actual Telegram chat ID
 
-# Global candle list
-candles = []
+# Function to send Telegram message
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
+    try:
+        response = requests.post(url, data=payload)
+        response.raise_for_status()  # This will raise an error for non-200 status codes
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to send message: {e}")
+        raise  # Re-raise the exception so it's logged by Flask
 
-CSV_FILE = "candles.csv"
+# WebSocket callback handlers
+def on_message(ws, message):
+    data = json.loads(message)
+    if "candles" in data:
+        candles = data["candles"]
+        df = pd.DataFrame(candles, columns=["timestamp", "open", "high", "low", "close"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
 
-# === FastAPI App with Lifespan (replaces @on_event) ===
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    asyncio.create_task(fetch_and_update_candles())
-    yield
+        latest = df.iloc[-1]
+        previous = df.iloc[-2]
 
-app = FastAPI(lifespan=lifespan)
+        # Simple breakout check
+        if latest["high"] > previous["high"]:
+            send_telegram_message("🚀 Breakout UP Confirmed!")
+        elif latest["low"] < previous["low"]:
+            send_telegram_message("📉 Breakout DOWN Confirmed!")
 
-# === Fetch Initial Candles from Deriv ===
-async def fetch_initial_candles():
-    async with websockets.connect(WS_URL) as ws:
-        request = {
-            "ticks_history": SYMBOL,
-            "style": "candles",
-            "granularity": GRANULARITY,
-            "count": COUNT,
-        }
-        await ws.send(json.dumps(request))
-        response = await ws.recv()
-        data = json.loads(response)
-        return data.get("candles", [])
+def on_error(ws, error):
+    print("WebSocket error:", error)
 
-# === Save new candles to CSV ===
-def save_to_csv(new_candles):
-    if not new_candles:
-        return
-    df = pd.DataFrame(new_candles)
-    df["time"] = pd.to_datetime(df["epoch"], unit="s")
-    df = df[["time", "open", "high", "low", "close"]]
+def on_close(ws, close_status_code, close_msg):
+    print("WebSocket closed")
 
-    if not os.path.isfile(CSV_FILE):
-        df.to_csv(CSV_FILE, index=False)
-    else:
-        # Avoid duplicate entries
-        existing = pd.read_csv(CSV_FILE)
-        existing_times = set(existing["time"])
-        df = df[~df["time"].astype(str).isin(existing_times)]
-        df.to_csv(CSV_FILE, mode='a', header=False, index=False)
+def on_open(ws):
+    print("WebSocket connection opened")
+    subscribe_message = {
+        "ticks_history": "R_100",
+        "style": "candles",
+        "granularity": 60,
+        "count": 100,
+        "subscribe": 1
+    }
+    ws.send(json.dumps(subscribe_message))
 
-# === Periodically Update Candles Every 60 Seconds ===
-async def fetch_and_update_candles():
-    global candles
-    while True:
-        try:
-            new_data = await fetch_initial_candles()
-            candles = new_data
-            save_to_csv(new_data)
-        except Exception as e:
-            print("Error fetching or saving candles:", e)
-        await asyncio.sleep(60)
+# Example function to get signals
+def get_signals():
+    # Example signals data (this can be replaced with real-time data)
+    signals = [
+        {"symbol": "BTCUSDT", "action": "BUY", "price": 27500},
+        {"symbol": "ETHUSDT", "action": "SELL", "price": 1850}
+    ]
+    return signals
 
-# === Candles Data Endpoint ===
-@app.get("/candles")
-async def get_candles():
-    return {"candles": candles}
-
-# === HTML Display Page ===
-@app.get("/", response_class=HTMLResponse)
-async def display_table():
-    if not candles:
-        return "<h2>Loading data...</h2>"
-
-    df = pd.DataFrame(candles)
-    df["time"] = pd.to_datetime(df["epoch"], unit="s")
-    df = df[["time", "open", "high", "low", "close"]]
-
-    html_table = df.to_html(index=False)
-
-    return f"""
-    <html>
-        <head>
-            <title>R_75 - Last 20 Candles</title>
-            <meta http-equiv="refresh" content="60">
-            <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                table {{ border-collapse: collapse; width: 100%; }}
-                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: center; }}
-                th {{ background-color: #f2f2f2; }}
-            </style>
-        </head>
-        <body>
-            <h2>R_75 - Last 20 One-Minute Candles</h2>
-            {html_table}
-            <p>Auto-refreshes every 60 seconds. Data also saved to <code>candles.csv</code>.</p>
-        </body>
-    </html>
-    """
-
-# === Run Locally ===
+# Run WebSocket
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    socket = "wss://ws.binaryws.com/websockets/v3?app_id=1089"
+    ws = websocket.WebSocketApp(socket,
+                                 on_open=on_open,
+                                 on_message=on_message,
+                                 on_error=on_error,
+                                 on_close=on_close)
+    ws.run_forever()
